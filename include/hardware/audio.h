@@ -1,5 +1,7 @@
 /*
  * Copyright (C) 2011 The Android Open Source Project
+ * Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +24,16 @@
 #include <strings.h>
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#include <string.h>
 
 #include <cutils/bitops.h>
 
 #include <hardware/hardware.h>
 #include <system/audio.h>
 #include <hardware/audio_effect.h>
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+#include <listen_types.h>
+#endif
 
 __BEGIN_DECLS
 
@@ -134,6 +140,27 @@ __BEGIN_DECLS
 #define AUDIO_OFFLOAD_CODEC_DOWN_SAMPLING  "music_offload_down_sampling"
 #define AUDIO_OFFLOAD_CODEC_DELAY_SAMPLES  "delay_samples"
 #define AUDIO_OFFLOAD_CODEC_PADDING_SAMPLES  "padding_samples"
+
+/* Query handle fm parameter*/
+#define AUDIO_PARAMETER_KEY_HANDLE_FM "handle_fm"
+
+/* Query fm volume */
+#define AUDIO_PARAMETER_KEY_FM_VOLUME "fm_volume"
+
+/* Query Fluence type */
+#define AUDIO_PARAMETER_KEY_FLUENCE "fluence"
+
+/* Query if surround sound recording is supported */
+#define AUDIO_PARAMETER_KEY_SSR "ssr"
+
+/* Query if a2dp  is supported */
+#define AUDIO_PARAMETER_KEY_HANDLE_A2DP_DEVICE "isA2dpDeviceSupported"
+
+/* Query ADSP Status */
+#define AUDIO_PARAMETER_KEY_ADSP_STATUS "ADSP_STATUS"
+
+/* Query if Proxy can be Opend */
+#define AUDIO_PARAMETER_KEY_CAN_OPEN_PROXY "can_open_proxy"
 
 /**************************************/
 
@@ -413,14 +440,53 @@ typedef struct audio_stream_in audio_stream_in_t;
 static inline size_t audio_stream_frame_size(const struct audio_stream *s)
 {
     size_t chan_samp_sz;
-    audio_format_t format = s->get_format(s);
+    uint32_t chan_mask = s->get_channels(s);
+    int format = s->get_format(s);
+    char *tmpparam;
+    int isParamEqual;
 
-    if (audio_is_linear_pcm(format)) {
-        chan_samp_sz = audio_bytes_per_sample(format);
-        return popcount(s->get_channels(s)) * chan_samp_sz;
+    if(!s)
+        return 0;
+
+    if (audio_is_input_channel(chan_mask)) {
+        chan_mask &= (AUDIO_CHANNEL_IN_STEREO | \
+                      AUDIO_CHANNEL_IN_MONO | \
+                      AUDIO_CHANNEL_IN_5POINT1);
     }
 
-    return sizeof(int8_t);
+    tmpparam = s->get_parameters(s, "voip_flag");
+    isParamEqual = !strncmp(tmpparam,"voip_flag=1", sizeof("voip_flag=1"));
+    free(tmpparam);
+    if(isParamEqual) {
+        if(format != AUDIO_FORMAT_PCM_8_BIT)
+            return popcount(chan_mask) * sizeof(int16_t);
+        else
+            return popcount(chan_mask) * sizeof(int8_t);
+    }
+
+    switch (format) {
+    case AUDIO_FORMAT_AMR_NB:
+        chan_samp_sz = 32;
+        break;
+    case AUDIO_FORMAT_EVRC:
+        chan_samp_sz = 23;
+        break;
+    case AUDIO_FORMAT_QCELP:
+        chan_samp_sz = 35;
+        break;
+    case AUDIO_FORMAT_AMR_WB:
+        chan_samp_sz = 61;
+        break;
+    case AUDIO_FORMAT_PCM_16_BIT:
+        chan_samp_sz = sizeof(int16_t);
+        break;
+    case AUDIO_FORMAT_PCM_8_BIT:
+    default:
+        chan_samp_sz = sizeof(int8_t);
+        break;
+    }
+
+    return popcount(chan_mask) * chan_samp_sz;
 }
 
 
@@ -543,6 +609,20 @@ struct audio_hw_device {
      * method may leave it set to NULL.
      */
     int (*get_master_mute)(struct audio_hw_device *dev, bool *mute);
+
+#ifdef QCOM_LISTEN_FEATURE_ENABLE
+    /** This method opens the listen session and returns a handle */
+    status_t (*open_listen_session)(struct audio_hw_device *dev,
+                                    struct listen_session** handle);
+
+    /** This method closes the listen session  */
+    status_t (*close_listen_session)(struct audio_hw_device *dev,
+                                     struct listen_session* handle);
+
+    /** This method sets the mad observer callback  */
+    status_t (*set_mad_observer)(struct audio_hw_device *dev,
+                                 listen_callback_t cb_func);
+#endif
 };
 typedef struct audio_hw_device audio_hw_device_t;
 
