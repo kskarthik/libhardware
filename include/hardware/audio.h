@@ -31,7 +31,7 @@
 #include <hardware/hardware.h>
 #include <system/audio.h>
 #include <hardware/audio_effect.h>
-#ifdef QCOM_LISTEN_FEATURE_ENABLE
+#ifdef AUDIO_LISTEN_ENABLED
 #include <listen_types.h>
 #endif
 
@@ -619,18 +619,25 @@ struct audio_hw_device {
      */
     int (*get_master_mute)(struct audio_hw_device *dev, bool *mute);
 
-#ifdef QCOM_LISTEN_FEATURE_ENABLE
+#ifdef AUDIO_LISTEN_ENABLED
     /** This method opens the listen session and returns a handle */
-    status_t (*open_listen_session)(struct audio_hw_device *dev,
-                                    struct listen_session** handle);
+    int (*open_listen_session)(struct audio_hw_device *dev,
+                               struct listen_session** handle);
 
     /** This method closes the listen session  */
-    status_t (*close_listen_session)(struct audio_hw_device *dev,
-                                     struct listen_session* handle);
+    int (*close_listen_session)(struct audio_hw_device *dev,
+                                struct listen_session* handle);
 
     /** This method sets the mad observer callback  */
-    status_t (*set_mad_observer)(struct audio_hw_device *dev,
-                                 listen_callback_t cb_func);
+    int (*set_mad_observer)(struct audio_hw_device *dev,
+                            listen_callback_t cb_func);
+
+    /*  This method is used for setting listen hal specfic parameters.
+     *  If multiple paramets are set in one call and setting any one of them
+     *  fails it will return failure.
+     */
+    int (*listen_set_parameters)(struct audio_hw_device *dev,
+                                 const char *kv_pairs);
 #endif
 };
 typedef struct audio_hw_device audio_hw_device_t;
